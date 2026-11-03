@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+/* Neutral and plain (DECISIONS.md #24): white surface, Tailwind's neutral greys, colour only for
+   up, down and focus. Components use the semantic names below, never palette colours directly. */
+
+@font-face {
+  /* Archivo (OFL, Omnibus-Type) from @fontsource-variable/archivo, subset once to digits and price
+     symbols (12 kB instead of 90 kB), keeping the wght and wdth axes and tabular figures:
+     uvx --from fonttools --with brotli pyftsubset \
+       node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2 \
+       --unicodes="U+0020,U+0024,U+002B-002E,U+0030-0039,U+00A0,U+2009,U+202F,U+2212" \
+       --layout-features="tnum,lnum,kern" --flavor=woff2 --output-file=web/src/fonts/archivo-numerals.woff2 */
+  font-family: "Archivo Numerals";
+  src: url("./fonts/archivo-numerals.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  unicode-range: U+0020, U+0024, U+002B-002E, U+0030-0039, U+00A0, U+2009, U+202F, U+2212;
+}
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-rule: var(--rule);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-on-signal: var(--on-signal);
+  --color-focus: var(--focus);
+  --font-display: "Archivo Numerals", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --paper: var(--color-white);
+  --sheet: var(--color-white);
+  --ink: var(--color-neutral-900);
+  --ink-2: var(--color-neutral-600);
+  --rule: var(--color-neutral-200);
+  --up: var(--color-green-700);
+  --down: var(--color-red-700);
+  --on-signal: var(--color-white);
+  --focus: var(--color-blue-600);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: var(--color-neutral-950);
+  --sheet: var(--color-neutral-900);
+  --ink: var(--color-neutral-100);
+  --ink-2: var(--color-neutral-400);
+  --rule: var(--color-neutral-800);
+  --up: var(--color-green-400);
+  --down: var(--color-red-400);
+  --on-signal: var(--color-neutral-950);
+  --focus: var(--color-blue-400);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    caret-color: var(--focus);
+    accent-color: var(--ink);
+    scrollbar-color: var(--rule) var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  a {
+    text-decoration-color: var(--rule);
+    text-underline-offset: 0.2em;
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* The hero: expanded Archivo with tabular figures, so the digits never jump. */
+  /* Sized to the card, so the widest price ($888,888.88 in expanded width) still fits. */
+  .price-box {
+    container-type: inline-size;
+  }
+  .price {
+    font-size: clamp(2rem, 13.5cqi, 5rem);
+    font-stretch: 125%;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-feature-settings: "tnum";
+  }
+
+  .font-display {
+    font-feature-settings: "tnum";
+  }
+
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+  }
+  .dot-live {
+    background: var(--up);
+  }
+  .dot-delayed {
+    background: var(--down);
+  }
+  /* Paused: a hollow dot, so the state is not told by colour alone (the label says it too). */
+  .dot-paused {
+    box-shadow: inset 0 0 0 1.5px var(--ink-2);
+  }
+
+  .guess {
+    color: var(--on-signal);
+    transition:
+      background-color 150ms ease-out,
+      transform 100ms ease-out;
+  }
+  .guess-up {
+    --signal: var(--up);
+  }
+  .guess-down {
+    --signal: var(--down);
+  }
+  .guess:not(:disabled) {
+    background: var(--signal);
+  }
+  .guess:not(:disabled):hover {
+    background: color-mix(in oklch, var(--signal) 86%, var(--ink));
+  }
+  .guess:not(:disabled):active {
+    transform: translateY(1px);
+  }
+  .guess:disabled {
+    background: var(--rule);
+    color: var(--ink-2);
+    cursor: not-allowed;
+  }
+
+  .toggle {
+    color: var(--ink-2);
+    transition: color 150ms ease-out;
+  }
+  .toggle:hover {
+    color: var(--ink);
+  }
+  .toggle[aria-pressed="true"] {
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--rule);
+    background: var(--sheet);
+  }
+
+  /* Indeterminate progress while the server works: a short segment sliding across the track. */
+  .busy-bar {
+    width: 35%;
+    animation: busy 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+
+  /* The deliberate motion moment: the result reveal. */
+  .reveal {
+    animation: reveal 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.3em) scale(0.85);
+    filter: blur(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component style */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same */
+    transition: none !important;
+  }
+
+  /* Without motion, a dimmed full bar still says "working" without suggesting partial progress. */
+  .busy-bar {
+    width: 100%;
+    opacity: 0.35;
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "btc-updown",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "db": "docker compose up -d --wait",
+    "dev": "npm run db && (npm run dev -w api & npm run dev -w web & wait)",
+    "test": "npm run db && npm test -w api",
+    "test:e2e": "npm run db && npm run test:e2e -w web",
+    "test:e2e:ui": "npm run db && npm run test:e2e -w web -- --ui",
+    "check": "biome check . && npm run typecheck -ws",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.105.3",
+    "lucide-react": "^1.66.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/node": "^24",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "api": "*",
+    "tailwindcss": "^4.3.4",
+    "tsx": "^4.23.15",
+    "vite": "^8.3.5"
+  }
+}
