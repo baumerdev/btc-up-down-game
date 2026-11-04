@@ -3,3 +3,11 @@ dist/
 test-results/
 playwright-report/
 .DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+infra/build/
+*.tfplan
+*.tfvars

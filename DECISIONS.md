@@ -79,7 +79,7 @@ All player endpoints return the same state (Appendix A), including the guess win
 
 ## 13. Cost limits
 
-API Gateway throttling (~50 req/s), the account's Lambda concurrency quota of 10, and an AWS Budgets alarm. Requests are the cost driver; pausing (#12) is the main lever. Throttling is global, so one attacker can slow the game but not raise the bill.
+API Gateway throttling (~50 req/s), the account's Lambda concurrency quota of 10, and an AWS Budgets alarm (account-wide, 10 USD per month, e-mail at 50 % and 100 % of actual and 100 % of forecast spend; it notifies, it doesn't stop anything; the recipient comes from the gitignored `infra/terraform.tfvars`, not from the repository). Requests are the cost driver; pausing (#12) is the main lever. Throttling is global, so one attacker can slow the game but not raise the bill.
 
 ## 14. Security
 
@@ -94,18 +94,20 @@ API Gateway throttling (~50 req/s), the account's Lambda concurrency quota of 10
 | Untrusted Kraken data | Validated with `zod`; invalid data is treated as an outage |
 | Information leakage | Error codes only, no stack traces |
 | Transport | HTTPS only, HSTS, `nosniff`, `no-referrer` |
-| Supply chain, pipeline | Lockfile, `npm ci`, Dependabot, public npm registry; GitHub OIDC limited to `main`, Actions pinned to SHAs |
-| Secrets | None in code; the origin secret lives in encrypted Terraform state |
+| Supply chain | Lockfile, `npm ci`, public npm registry only, few dependencies |
+| Secrets | None in code or in the repository; the origin secret and the budget e-mail live only in the encrypted Terraform state and in a gitignored `terraform.tfvars` |
 
 No AWS WAF (~$6–8/month). **Revisit when** there are real users or attacks.
 
 ## 15. Terraform
 
-All infrastructure in Terraform, state in S3 with native locking. A bootstrap config creates the state bucket and the OIDC deploy role. Lambda bundled with esbuild. Alternative: AWS CDK.
+All infrastructure in Terraform, state in S3 with native locking. A bootstrap config, applied once by hand with local state, creates only the state bucket (with `prevent_destroy`). Lambda bundled with esbuild. Alternative: AWS CDK.
 
-## 16. GitHub Actions
+## 16. Deployment from a laptop, no CI/CD
 
-Every push and PR: Biome, type check, unit, API and end-to-end tests, `terraform fmt`/`validate`. On `main`: `terraform apply`, upload the frontend, invalidate CloudFront, then a read-only smoke test against the live URL. One environment.
+`infra/deploy.sh` builds the Lambda, runs `terraform apply` (which shows the plan and asks for confirmation), uploads the frontend to S3, invalidates CloudFront, and runs a read-only smoke test against the live URL. It always uses the `btc-updown` AWS profile and derives the state bucket from the account ID, so the ID isn't in the repository. Hashed assets are uploaded first with a one-year immutable cache and never deleted; `index.html` and the other unhashed files follow with `no-cache`. A cached old `index.html` therefore still finds its assets. The budget e-mail comes from a gitignored `infra/terraform.tfvars`. One environment. Checks and tests run locally (`npm run check`, `npm test`, `npm run test:e2e`).
+
+Rejected: GitHub Actions with OIDC. The repository has to be public, and so would every workflow log, which would need constant care that no confidential data ends up there. A pipeline also needs an AWS role with broad rights, guarded by a permissions boundary. For a demo deployed a handful of times, that is more risk and review than it saves. **Revisit when** several people deploy or deployments become frequent.
 
 ## 17. Frontend: React, Vite, Tailwind
 
@@ -118,7 +120,7 @@ React, the tool I know best. Rejected: shadcn/ui (more code to review than it sa
 - **Unit** (Vitest): game rules and the Kraken adapter, including the edge cases from #4.
 - **API** (Vitest) against DynamoDB Local with a fake price module, so the real conditional expressions run.
 - **End-to-end** (Playwright) against the full local stack with a Kraken stub: first visit, guess, reload, win and loss, late guess, idle pause, price outage, language and theme. Playwright because one test can drive two tabs of the same player (#7).
-- **Smoke test** after every deployment.
+- **Smoke test** at the end of every deployment (#16).
 
 `GUESS_WINDOW_MS` and `MAX_GUESS_DELAY_MS` default to 60 s and 5 s; end-to-end tests set both to 3 s.
 
@@ -162,6 +164,7 @@ Avoided: eyebrows, gradients, indigo/purple accents, glass, card stacks, hero-me
 - **Malformed stored ID:** `400`, handled like `404`.
 - **Local CSP:** applied by `vite preview`, so end-to-end tests run under it.
 - **Origin secret:** `X-Origin-Secret`, constant-time check in `api/src/lambda.ts`.
+- **AWS:** Lambda on Node.js 24, arm64, 512 MB, 10 s timeout, logs kept 14 days; CloudFront `PriceClass_100`, HTTP/3, Origin Shield only on a separate origin for `/api/price` (the player endpoints aren't cached and would only pay for it), API errors not cached (`error_caching_min_ttl = 0`); only `X-Player-Id` and `Content-Type` are forwarded to the player endpoints. The Lambda is bundled with esbuild (`npm run build -w api`).
 - **Long locking:** the status text changes after 8, 16 and 24 s, and explains when the window has ended without an entry price.
 
 ## Scaling path (not built)

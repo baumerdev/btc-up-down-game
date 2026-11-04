@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "DYNAMODB_ENDPOINT=http://localhost:8000 TABLE_NAME=btc-updown-local PORT=3030 tsx watch src/server.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outfile=../infra/build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1161.0",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^24",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "vitest": "^5.1.0"
   }

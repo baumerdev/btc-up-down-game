@@ -50,10 +50,24 @@ The end-to-end tests run the built frontend under the production Content Securit
 
 ## Deployment
 
-Not built yet. Planned (see [DECISIONS.md](DECISIONS.md) #5, #15, #16):
+Deployed from a laptop to AWS (`eu-central-1`) with Terraform; there is no CI/CD pipeline (see [DECISIONS.md](DECISIONS.md) #16). Requires Terraform, the AWS CLI and an AWS profile named `btc-updown`. Every command sets that profile explicitly, so a different default profile in the shell can't deploy into the wrong account.
 
-- Terraform for all AWS resources in `eu-central-1`, state in S3.
-- GitHub Actions: checks and tests on every push and pull request; on `main`, `terraform apply`, upload of the frontend to S3 and a smoke test against the live URL.
+1. Once, create the S3 bucket for the Terraform state:
+
+   ```sh
+   AWS_PROFILE=btc-updown terraform -chdir=infra/bootstrap init
+   AWS_PROFILE=btc-updown terraform -chdir=infra/bootstrap apply
+   ```
+
+2. Create `infra/terraform.tfvars` (gitignored) with `budget_email = "you@example.com"`.
+3. Run `infra/deploy.sh`. It builds everything, shows the Terraform plan and asks for confirmation, uploads the frontend, and smoke-tests the live URL.
+
+To remove everything, run the following. It needs the Lambda build and `terraform.tfvars`, because Terraform evaluates the whole configuration before destroying. The state bucket is protected and removed by hand.
+
+```sh
+npm run build -w api
+AWS_PROFILE=btc-updown terraform -chdir=infra destroy
+```
 
 ## How I worked
 
