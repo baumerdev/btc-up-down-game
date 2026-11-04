@@ -213,12 +213,11 @@ test('two tabs of one player: only one of two simultaneous guesses is accepted',
     await statusArea(page).textContent(),
     await statusArea(second).textContent(),
   ]
-  await expect
-    .poll(async () => (await texts()).filter((t) => t?.includes('already active')).length)
-    .toBe(1)
+  // One guess wins; the other tab shows that same guess with its countdown, not an error.
   await expect
     .poll(async () => (await texts()).filter((t) => t?.includes('locked at')).length)
-    .toBe(1)
+    .toBe(2)
+  expect((await texts()).some((t) => t?.includes('already active'))).toBe(false)
 })
 
 test('no accessibility violations in either theme, with history', async ({ page, request }) => {

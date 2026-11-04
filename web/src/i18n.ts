@@ -50,7 +50,6 @@ const en = {
       'Your guess arrived too late for the price you saw. Check the current price and guess again.',
     TIMEOUT: 'Your guess did not reach the server in time and was not placed. Please try again.',
     PLAYER_NOT_FOUND: 'Your previous score could not be found. You are starting at 0.',
-    GUESS_ACTIVE: 'A guess is already active, perhaps in another tab. It is shown here now.',
     NETWORK: 'No connection to the server. Check your connection and retry.',
     generic: 'Something went wrong on our side. Please retry.',
   } satisfies Partial<Record<ClientErrorCode, string>> & { generic: string },
@@ -114,8 +113,6 @@ const de: Dict = {
     TIMEOUT:
       'Dein Tipp hat den Server nicht rechtzeitig erreicht und wurde nicht abgegeben. Bitte versuche es erneut.',
     PLAYER_NOT_FOUND: 'Dein bisheriger Punktestand wurde nicht gefunden. Du startest bei 0.',
-    GUESS_ACTIVE:
-      'Es läuft bereits ein Tipp, vielleicht in einem anderen Tab. Er wird jetzt hier angezeigt.',
     NETWORK: 'Keine Verbindung zum Server. Prüfe deine Verbindung und versuche es erneut.',
     generic: 'Bei uns ist etwas schiefgelaufen. Bitte versuche es erneut.',
   },

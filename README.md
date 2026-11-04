@@ -4,10 +4,10 @@ A small web game: guess whether the Bitcoin price (BTC/USD) will be higher or lo
 
 ## How it plays
 
-- The current BTC price and your score are always visible.
+- The current BTC price and your score are always visible. After 5 minutes without any interaction and without an active guess, the price pauses with its last value and time; one click resumes it, so a forgotten tab doesn't keep polling.
 - Pick **Up** or **Down**. While the guess is active, you can't place another one.
 - After 60 seconds, the guess resolves as soon as the price differs from the entry price. If the price is unchanged at the 60 s mark, the guess waits until it moves.
-- The last 10 guesses are listed with entry price, deciding price and time, so every result can be checked.
+- The last 10 guesses are listed with the time they were placed, the entry price and the deciding price, so every result can be checked.
 - English and German, light and dark theme.
 
 Prices come from [Kraken](https://www.kraken.com/)'s public trade history. The server fetches all prices and sets all timestamps; the browser only sends "up" or "down". Entry and exit prices are the last trades before the guess and before the end of the window, so nobody can lock in an old price (see [DECISIONS.md](DECISIONS.md) #1–#4).
@@ -77,7 +77,19 @@ AWS_PROFILE=btc-updown terraform -chdir=infra destroy
 
 ## How I worked
 
-I planned the project with an AI assistant (Claude Code) before any code was written, then let it build a complete first version from that plan, and reviewed the result. The first commit is the first complete version (without deployment); review fixes and the deployment follow as separate commits.
+I planned the whole project with an AI assistant (Claude Code) before any code was written, then had it build a complete first version from that plan, and reviewed the result. The assistant researched, tested APIs and proposed implementations; the product decisions were mine, most of them made up front during planning rather than in response to its suggestions. For example:
+
+- **Fairness first:** the server owns every price and timestamp, and the client never talks to the price API. I spotted that counting the *displayed* price would let a player watch a live chart elsewhere and lock in a stale price.
+- **Fixed moments, not fixed waits:** the guess time and the end of the window are fixed in the database; delayed exchange data is handled by retrying for exactly those moments.
+- **A real BTC/USD source whose terms allow this use**, checked before choosing it.
+- **Load and abuse:** forgotten tabs must stop polling, the displayed price reaches the exchange about once per second regardless of player count, and a player is only created with their first guess.
+- **Clean API semantics:** reading the player state never writes; advancing a guess is an explicit command.
+- **Product scope:** no cancelling of guesses (players would cancel just before losing), English and German, light and dark themes, accessibility, and end-to-end tests with configurable timing.
+- **Deployment:** AWS serverless with Terraform, and no public CI pipeline, so no workflow logs need guarding in a public repository.
+
+**Kept simple on purpose:** no login (an anonymous ID in the browser), one DynamoDB table and one Lambda, polling instead of WebSockets, no price chart, no leaderboard, no cancelling of guesses, and no CI pipeline. The effort went where the game can be wrong: who owns prices and time, and that a guess can only be placed and scored once.
+
+During review, several additional AI review passes (code, security, requirements) produced findings; I decided which to fix and which to accept. The first commit is the first complete version; the deployment and the review fixes follow as separate commits.
 
 - [DECISIONS.md](DECISIONS.md): every product and technical decision, why it was made, and the alternatives
 - [GLOSSARY.md](GLOSSARY.md): the domain terms used in code and docs

@@ -32,8 +32,10 @@ export function History({ history }: { history: HistoryEntry[] }) {
                     <span className="whitespace-nowrap">{f.usd(h.entryPrice)}</span> →{' '}
                     <span className="whitespace-nowrap">{f.usd(h.decidingPrice)}</span>
                   </span>
-                  <time className="block text-ink-2 text-xs" dateTime={h.decidingTradeTime}>
-                    {f.dateTime(h.decidingTradeTime)}
+                  {/* When the guess was placed. The deciding trade can be from before the
+                      window ended (#4), which would read as "decided too early". */}
+                  <time className="block text-ink-2 text-xs" dateTime={h.createdAt}>
+                    {f.dateTime(h.createdAt)}
                   </time>
                 </span>
                 <span

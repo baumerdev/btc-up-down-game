@@ -74,7 +74,7 @@ All player endpoints return the same state (Appendix A), including the guess win
 ## 12. Polling and idle
 
 - Price every 2 s while the tab is visible (Page Visibility API); *Delayed* when `observedAt` is older than 5 s server time, which disables guessing.
-- After 5 min without interaction and without an active guess, polling pauses until the player clicks "Resume".
+- After 5 min without interaction and without an active guess, polling pauses until the player clicks "Resume". This reads the rule "the player can at all times see the latest price" as "whenever the player is playing": the last price stays visible with its time and a *Paused* label, an active guess is never paused, and one click brings the live price back. A forgotten tab should not keep polling for hours.
 - The countdown runs locally against the server clock offset; at `resolvableAt` the client calls resolve, then every 2 s while needed.
 
 ## 13. Cost limits
@@ -130,7 +130,7 @@ React, the tool I know best. Rejected: shadcn/ui (more code to review than it sa
 
 ## 19. Repository and tooling
 
-npm workspaces (`web/`, `api/`, `infra/`), TypeScript, Biome, Node 24. `npm run dev` starts DynamoDB Local, the API (`tsx --watch`) and Vite. Frontend data fetching with TanStack Query over a small `fetch` wrapper; Zod; AWS SDK v3. Not used: Axios, state libraries, a router, date libraries, component libraries, Powertools. Structured JSON logs. MIT licence.
+npm workspaces (`web/`, `api/`; `infra/` holds Terraform), TypeScript, Biome, Node 24. `npm run dev` starts DynamoDB Local, the API (`tsx --watch`) and Vite. Frontend data fetching with TanStack Query over a small `fetch` wrapper; Zod; AWS SDK v3. Not used: Axios, state libraries, a router, date libraries, component libraries, Powertools. Structured JSON logs. MIT licence.
 
 ## 20. Scope
 
@@ -138,9 +138,9 @@ npm workspaces (`web/`, `api/`, `infra/`), TypeScript, Biome, Node 24. `npm run 
 
 **Added:** return after closing the browser (#9), countdown, entry price, waiting state, last result, history (#10), English and German (#21).
 
-**Out:** leaderboard, accounts, push, WAF, cancelling a guess (would let players dodge losses), player names.
+**Out:** leaderboard, accounts, push, cancelling a guess (would let players dodge losses), player names.
 
-**Operation:** personal AWS account, `eu-central-1`, every resource tagged `project=btc-up-down`, removed with `terraform destroy` afterwards.
+**Operation:** personal AWS account, `eu-central-1`, every resource tagged `project=btc-updown`, removed with `terraform destroy` afterwards.
 
 ## 21. English and German
 
@@ -177,7 +177,7 @@ Avoided: eyebrows, gradients, indigo/purple accents, glass, card stacks, hero-me
 
 ## Scaling path (not built)
 
-Ingest Kraken's WebSocket feed into our own price table, push prices to clients, resolve from our table, add WAF, obtain a commercial data licence.
+Ingest Kraken's WebSocket feed into our own price table, push prices to clients, resolve from our table, obtain a commercial data licence.
 
 ## Appendix A: Request flow
 

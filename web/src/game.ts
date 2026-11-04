@@ -194,7 +194,10 @@ export function useGame() {
         void priceQuery.refetch()
       }
       if (code === 'GUESS_ACTIVE') {
+        // Another tab won (#7). Showing its guess with the countdown says it all; a notice
+        // would cover the countdown and the result.
         void playerQuery.refetch()
+        return
       }
       if (code === 'TIMEOUT') {
         // If the guess reached the server after all, show it instead of an error (Appendix A 3f).
