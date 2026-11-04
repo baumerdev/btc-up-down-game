@@ -128,11 +128,13 @@ export function createApp({
     }
 
     for (const since of startTimes) {
+      // A deadline is not a Kraken failure, so it doesn't pause Kraken for other players.
+      if (clock() > deadline) {
+        return null
+      }
       const trades: Trade[] = []
+      let timedOut = false
       try {
-        if (clock() > deadline) {
-          throw new Error('deadline exceeded')
-        }
         for await (const page of prices.tradesSince(since)) {
           trades.push(...page)
           const { status } = rule(trades)
@@ -140,12 +142,17 @@ export function createApp({
             break
           }
           if (clock() > deadline) {
-            throw new Error('deadline exceeded')
+            timedOut = true
+            break
           }
         }
       } catch (error) {
         log({ level: 'warn', msg: 'kraken trades failed', error: String(error) })
         krakenPausedUntil = clock() + KRAKEN_BACKOFF_MS
+        return null
+      }
+
+      if (timedOut) {
         return null
       }
 
@@ -391,12 +398,15 @@ export function createApp({
 
       // The guess is stored. Try the entry price for a short while; if Kraken is slow or down,
       // the guess is returned as *locking* and resolve finds the price later (#2).
-      const deadline = clock() + KRAKEN_DEADLINE_MS
-      while (
-        !(await findEntryPrice(playerId, guess, deadline)) &&
-        clock() + ENTRY_PRICE_RETRY_MS < now + ENTRY_PRICE_WAIT_MS
-      ) {
+      // Wait first: the entry price needs a trade after `createdAt`, which a call right now
+      // almost never sees. Lookups only start within the short window, so the response stays
+      // below about 3 s plus DynamoDB, well inside the client's timeout.
+      const deadline = now + ENTRY_PRICE_WAIT_MS
+      while (clock() + ENTRY_PRICE_RETRY_MS <= deadline) {
         await sleep(ENTRY_PRICE_RETRY_MS)
+        if (await findEntryPrice(playerId, guess, deadline)) {
+          break
+        }
       }
       return c.json(toPlayerState(await store.getPlayer(playerId)), 201)
     },

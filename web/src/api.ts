@@ -26,8 +26,11 @@ export function storePlayerId(id: string | null): void {
   }
 }
 
-/** The API's error codes plus two from the browser: the request timed out, or never got through. */
-export type ClientErrorCode = ErrorBody['error']['code'] | 'TIMEOUT' | 'NETWORK'
+/**
+ * The API's error codes, plus: the request timed out or never got through (browser), or a rate
+ * limit answered without our JSON body (WAF or API Gateway).
+ */
+export type ClientErrorCode = ErrorBody['error']['code'] | 'TIMEOUT' | 'NETWORK' | 'RATE_LIMITED'
 
 export class ApiError extends Error {
   constructor(
@@ -82,7 +85,9 @@ export async function apiRequest<T>(
 
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new ApiError(res.status, (data as ErrorBody | null)?.error?.code ?? 'INTERNAL')
+    // Rate limits (WAF 403, API Gateway 429) answer without our JSON body.
+    const fallback = res.status === 403 || res.status === 429 ? 'RATE_LIMITED' : 'INTERNAL'
+    throw new ApiError(res.status, (data as ErrorBody | null)?.error?.code ?? fallback)
   }
 
   if (path.startsWith('/api/me')) {

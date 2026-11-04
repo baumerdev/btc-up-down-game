@@ -23,6 +23,8 @@ let trades: Trade[]
 let krakenDown: boolean
 /** Simulated time each Kraken search takes, to test the deadline. */
 let krakenDelayMs: number
+/** Number of Kraken trade searches, to check how often the API calls Kraken. */
+let krakenCalls: number
 let nextId: number
 
 /**
@@ -48,6 +50,7 @@ const prices: Prices = {
     return last
   },
   async *tradesSince(since) {
+    krakenCalls++
     if (krakenDown) {
       throw new Error('down')
     }
@@ -107,6 +110,7 @@ beforeEach(() => {
   trades = []
   krakenDown = false
   krakenDelayMs = 0
+  krakenCalls = 0
   nextId = 1
   app = createApp({
     prices,
@@ -244,6 +248,20 @@ describe('POST /api/me/guess', () => {
     const res = await postGuess('up', undefined, toIso(now - 5001))
     expect(res.status).toBe(422)
     expect(res.body).toEqual({ error: { code: 'PRICE_OUTDATED' } })
+  })
+
+  it('waits before the first entry-price lookup instead of calling Kraken at once', async () => {
+    await newPlayerWithGuess('up')
+    // The entry trade is published 100 ms after the guess; one lookup after the first wait finds it.
+    expect(krakenCalls).toBe(1)
+  })
+
+  it('starts no entry-price lookup after its 1 s window, even when Kraken is slow', async () => {
+    addTrade(-30_000, 100)
+    krakenDelayMs = 1000
+    const res = await postGuess('up')
+    expect(res.body.activeGuess?.state).toBe('locking')
+    expect(krakenCalls).toBe(1)
   })
 
   it('rejects a seen price time in the future', async () => {
@@ -418,8 +436,8 @@ describe('POST /api/me/guess/resolve', () => {
     const first = await postResolve(playerId)
     expect(first.body.activeGuess).toMatchObject({ entryPrice: 100 })
 
+    // A deadline is not a Kraken failure: the next request may call Kraken right away.
     krakenDelayMs = 0
-    now += 2001
     expect((await postResolve(playerId)).body.activeGuess).toBeNull()
   })
 

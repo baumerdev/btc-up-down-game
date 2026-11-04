@@ -16,6 +16,8 @@ The server stores `direction` and its own `createdAt`. The entry price is the la
 
 Public REST API, pair `XBTUSD`, no key: `Trades?count=1` for display, `Trades?since=` for entry and resolution. Kraken is the only checked source with real BTC/USD, trade history from any point in time, and terms that allow a non-commercial demo (Coinbase, Gemini and Binance forbid public display; Bitstamp and CoinGecko are too coarse). Rate limit is about 1 call/s per IP.
 
+With many players guessing at once, the per-guess trade lookups can reach Kraken's rate limit; results are then only delayed (#4), and the scaling path removes the per-guess calls.
+
 All Kraken specifics live in one module exposing `latestTrade()` and `tradesSince(time)`. No provider abstraction: there is no second provider.
 
 ## 4. Entry and resolution from trade history, triggered by the client
@@ -169,7 +171,7 @@ Avoided: eyebrows, gradients, indigo/purple accents, glass, card stacks, hero-me
 - **Local CSP:** applied by `vite preview`, so end-to-end tests run under it.
 - **Origin secret:** `X-Origin-Secret`, constant-time check in `api/src/lambda.ts`.
 - **AWS:** Lambda on Node.js 24, arm64, 512 MB, 10 s timeout, logs kept 14 days; CloudFront `PriceClass_100`, HTTP/3, Origin Shield only on a separate origin for `/api/price` (the player endpoints aren't cached and would only pay for it), API errors not cached (`error_caching_min_ttl = 0`); only `X-Player-Id` and `Content-Type` are forwarded to the player endpoints. The Lambda is bundled with esbuild (`npm run build -w api`).
-- **Kraken load:** all Kraken searches of one request share a 3 s deadline, well below the Lambda timeout; after a Kraken failure the Lambda instance skips Kraken for 2 s, and the guess stays as it is (#4). The cursor must be numeric before it goes into the next URL.
+- **Kraken load:** all Kraken searches of one request share a 3 s deadline, well below the Lambda timeout; placing a guess waits before its first lookup and starts lookups only within its 1 s window, so the response stays below about 3 s plus the database writes. After a Kraken failure (not a deadline) the Lambda instance skips Kraken for 2 s, and the guess stays as it is (#4). Rate-limit responses are shown to players as "too many requests". The cursor must be numeric before it goes into the next URL.
 - **One URL per endpoint:** API paths are accepted only in canonical form; WAF blocks anything else at CloudFront, and the Lambda rejects it with `400` as a second layer.
 - **`seenPriceTime` in the future** is rejected with `400`; it comes from our own price response, so a future value is forged.
 - **Local server** refuses to start without `DYNAMODB_ENDPOINT`, so it can never use the shell's default AWS credentials.

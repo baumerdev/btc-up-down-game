@@ -95,18 +95,16 @@ export async function ensureLocalTable(db: DynamoDBDocumentClient, table: string
 const isConditionFailed = (error: unknown) => error instanceof ConditionalCheckFailedException
 
 /**
- * Runs a conditional write. Returns false instead of throwing if the condition failed, that is,
- * another request changed the guess first (#7). app.ts then simply re-reads the player.
+ * Runs a conditional write. A failed condition means another request changed the guess first
+ * (#7); that is not an error, and app.ts simply re-reads the player.
  */
-async function writeIfConditionHolds(write: Promise<unknown>): Promise<boolean> {
+async function writeIfConditionHolds(write: Promise<unknown>): Promise<void> {
   try {
     await write
-    return true
   } catch (error) {
-    if (isConditionFailed(error)) {
-      return false
+    if (!isConditionFailed(error)) {
+      throw error
     }
-    throw error
   }
 }
 
@@ -174,7 +172,7 @@ export function createStore(db: DynamoDBDocumentClient, table: string) {
     },
 
     /** Stores the entry price on the active guess, once, and only if it is still the same guess. */
-    setEntryPrice(playerId: string, guessId: string, trade: Trade, now: number): Promise<boolean> {
+    setEntryPrice(playerId: string, guessId: string, trade: Trade, now: number): Promise<void> {
       return writeIfConditionHolds(
         db.send(
           new UpdateCommand({
@@ -196,7 +194,7 @@ export function createStore(db: DynamoDBDocumentClient, table: string) {
     },
 
     /** Marks the active guess as waiting, so GET /api/me reports that state too (#25). */
-    markWaiting(playerId: string, guessId: string, now: number): Promise<boolean> {
+    markWaiting(playerId: string, guessId: string, now: number): Promise<void> {
       return writeIfConditionHolds(
         db.send(
           new UpdateCommand({
@@ -222,7 +220,7 @@ export function createStore(db: DynamoDBDocumentClient, table: string) {
       guessId: string,
       result: HistoryItem,
       now: number,
-    ): Promise<boolean> {
+    ): Promise<void> {
       const history = [result, ...player.history].slice(0, HISTORY_LENGTH)
 
       return writeIfConditionHolds(

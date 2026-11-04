@@ -270,8 +270,13 @@ export function useGame() {
       void playerQuery.refetch()
       void priceQuery.refetch()
     },
-    /** The first GET /api/me failed and there is no player state to show. */
-    playerLoadFailed: playerQuery.isError && !player,
+    /** Why the first player state couldn't be loaded, or null. */
+    playerLoadError:
+      playerQuery.isError && !player
+        ? playerQuery.error instanceof ApiError
+          ? playerQuery.error.code
+          : 'NETWORK'
+        : null,
   }
 }
 

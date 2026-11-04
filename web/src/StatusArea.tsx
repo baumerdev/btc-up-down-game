@@ -12,6 +12,7 @@ export function StatusArea({ game }: { game: Game }) {
   const windowMs = game.player?.guessWindowMs ?? 60_000
   const msUntilWindowEnd = activeGuess ? Date.parse(activeGuess.resolvableAt) - serverNow : 0
   const windowOver = activeGuess?.state === 'open' && msUntilWindowEnd <= 0
+  const problem = game.notice ?? game.playerLoadError
 
   let message: React.ReactNode
   let action: React.ReactNode = null
@@ -28,10 +29,9 @@ export function StatusArea({ game }: { game: Game }) {
         onClick={game.resume}
       />
     )
-  } else if (game.notice || game.playerLoadFailed) {
-    const code = game.notice ?? 'NETWORK'
-    message = (t.errors as Record<string, string>)[code] ?? t.errors.generic
-    if (code === 'NETWORK' || !(code in t.errors)) {
+  } else if (problem) {
+    message = (t.errors as Record<string, string>)[problem] ?? t.errors.generic
+    if (problem === 'NETWORK' || problem === 'RATE_LIMITED' || !(problem in t.errors)) {
       action = (
         <StatusActionButton
           icon={<RotateCw size={16} aria-hidden="true" />}
