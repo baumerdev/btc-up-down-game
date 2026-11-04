@@ -33,7 +33,7 @@ const toKrakenRow = (t: (typeof trades)[number]) => [
 ]
 
 createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', `http://localhost:${PORT}`)
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
   const send = (status: number, body: unknown) => {
     res.writeHead(status, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(body))
@@ -89,4 +89,4 @@ createServer(async (req, res) => {
       last: last ? String(BigInt(Math.round(last.time * 1e6)) * 1000n) : (since ?? '0'),
     },
   })
-}).listen(PORT, () => console.log(`kraken stub on ${PORT}`))
+}).listen(PORT, '127.0.0.1', () => console.log(`kraken stub on ${PORT}`))

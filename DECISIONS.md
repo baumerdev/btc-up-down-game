@@ -79,7 +79,9 @@ All player endpoints return the same state (Appendix A), including the guess win
 
 ## 13. Cost limits
 
-API Gateway throttling (~50 req/s), the account's Lambda concurrency quota of 10, and an AWS Budgets alarm (account-wide, 10 USD per month, e-mail at 50 % and 100 % of actual and 100 % of forecast spend; it notifies, it doesn't stop anything; the recipient comes from the gitignored `infra/terraform.tfvars`, not from the repository). Requests are the cost driver; pausing (#12) is the main lever. Throttling is global, so one attacker can slow the game but not raise the bill.
+Layered limits: per-IP rate limits in AWS WAF in front of CloudFront (a stricter one for the uncached player endpoints), API Gateway throttling behind it, the account's Lambda concurrency quota, and an AWS Budgets alarm (10 USD per month, notification only; the recipient comes from the gitignored `infra/terraform.tfvars`). Requests are the cost driver; pausing (#12) is the main lever for normal use. The limits leave room for a group of reviewers sharing one office IP.
+
+For a short-lived demo, the remaining risk of sustained abuse is accepted: stop procedures exist outside the repository, and the app is removed after the evaluation. WAF costs about 6 USD per month while the app is online. Checked and not possible: CloudFront's flat-rate Free plan, because its tiers below Business allow only AWS-managed cache, origin-request and response-header policies, and this app needs its own (#8, #14). Also not built: a short TTL for players without a resolved guess, and CloudWatch alarms. **Revisit when** the app has real users.
 
 ## 14. Security
 
@@ -97,7 +99,9 @@ API Gateway throttling (~50 req/s), the account's Lambda concurrency quota of 10
 | Supply chain | Lockfile, `npm ci`, public npm registry only, few dependencies |
 | Secrets | None in code or in the repository; the origin secret and the budget e-mail live only in the encrypted Terraform state and in a gitignored `terraform.tfvars` |
 
-No AWS WAF (~$6–8/month). **Revisit when** there are real users or attacks.
+AWS WAF limits requests per IP (#13).
+
+Local DynamoDB and the local API listen on `127.0.0.1` only; the DynamoDB Local image is pinned by digest.
 
 ## 15. Terraform
 
@@ -105,7 +109,7 @@ All infrastructure in Terraform, state in S3 with native locking. A bootstrap co
 
 ## 16. Deployment from a laptop, no CI/CD
 
-`infra/deploy.sh` builds the Lambda, runs `terraform apply` (which shows the plan and asks for confirmation), uploads the frontend to S3, invalidates CloudFront, and runs a read-only smoke test against the live URL. It always uses the `btc-updown` AWS profile and derives the state bucket from the account ID, so the ID isn't in the repository. Hashed assets are uploaded first with a one-year immutable cache and never deleted; `index.html` and the other unhashed files follow with `no-cache`. A cached old `index.html` therefore still finds its assets. The budget e-mail comes from a gitignored `infra/terraform.tfvars`. One environment. Checks and tests run locally (`npm run check`, `npm test`, `npm run test:e2e`).
+`infra/deploy.sh` installs exactly the lockfile (`npm ci`), builds the Lambda, runs `terraform apply` (which shows the plan and asks for confirmation), uploads the frontend to S3, invalidates CloudFront, and runs a read-only smoke test against the live URL. It always uses the `btc-updown` AWS profile and derives the state bucket from the account ID, so the ID isn't in the repository. Hashed assets are uploaded first with a one-year immutable cache and never deleted; `index.html` and the other unhashed files follow with `no-cache`. A cached old `index.html` therefore still finds its assets. The budget e-mail comes from a gitignored `infra/terraform.tfvars`. One environment. Checks and tests run locally (`npm run check`, `npm test`, `npm run test:e2e`).
 
 Rejected: GitHub Actions with OIDC. The repository has to be public, and so would every workflow log, which would need constant care that no confidential data ends up there. A pipeline also needs an AWS role with broad rights, guarded by a permissions boundary. For a demo deployed a handful of times, that is more risk and review than it saves. **Revisit when** several people deploy or deployments become frequent.
 
@@ -165,6 +169,10 @@ Avoided: eyebrows, gradients, indigo/purple accents, glass, card stacks, hero-me
 - **Local CSP:** applied by `vite preview`, so end-to-end tests run under it.
 - **Origin secret:** `X-Origin-Secret`, constant-time check in `api/src/lambda.ts`.
 - **AWS:** Lambda on Node.js 24, arm64, 512 MB, 10 s timeout, logs kept 14 days; CloudFront `PriceClass_100`, HTTP/3, Origin Shield only on a separate origin for `/api/price` (the player endpoints aren't cached and would only pay for it), API errors not cached (`error_caching_min_ttl = 0`); only `X-Player-Id` and `Content-Type` are forwarded to the player endpoints. The Lambda is bundled with esbuild (`npm run build -w api`).
+- **Kraken load:** all Kraken searches of one request share a 3 s deadline, well below the Lambda timeout; after a Kraken failure the Lambda instance skips Kraken for 2 s, and the guess stays as it is (#4). The cursor must be numeric before it goes into the next URL.
+- **`seenPriceTime` in the future** is rejected with `400`; it comes from our own price response, so a future value is forged.
+- **Local server** refuses to start without `DYNAMODB_ENDPOINT`, so it can never use the shell's default AWS credentials.
+- **Deploy script** checks that the state bucket belongs to this account before `terraform init`, and runs `npm ci` before switching to the `btc-updown` profile.
 - **Long locking:** the status text changes after 8, 16 and 24 s, and explains when the window has ended without an entry price.
 
 ## Scaling path (not built)

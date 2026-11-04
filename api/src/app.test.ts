@@ -13,7 +13,7 @@ const config: Config = {
   guessWindowMs: 60_000,
   maxGuessDelayMs: 5_000,
   tableName: `test-${randomUUID()}`,
-  dynamoEndpoint: process.env.DYNAMODB_ENDPOINT ?? 'http://localhost:8000',
+  dynamoEndpoint: process.env.DYNAMODB_ENDPOINT ?? 'http://127.0.0.1:8000',
 }
 const db = createDynamoClient(config.dynamoEndpoint)
 const store = createStore(db, config.tableName)
@@ -21,6 +21,8 @@ const store = createStore(db, config.tableName)
 let now: number
 let trades: Trade[]
 let krakenDown: boolean
+/** Simulated time each Kraken search takes, to test the deadline. */
+let krakenDelayMs: number
 let nextId: number
 
 /**
@@ -49,19 +51,13 @@ const prices: Prices = {
     if (krakenDown) {
       throw new Error('down')
     }
+    now += krakenDelayMs
     yield publishedTrades().filter((t) => t.time >= since)
   },
 }
 
-const app = createApp({
-  prices,
-  store,
-  config,
-  clock: () => now,
-  sleep: async (ms) => {
-    now += ms
-  },
-})
+/** Created per test, so state inside the app (the Kraken backoff) can't leak between tests. */
+let app: ReturnType<typeof createApp>
 
 const toIso = (ms: number) => new Date(ms).toISOString()
 
@@ -110,7 +106,17 @@ beforeEach(() => {
   now = Date.UTC(2026, 10, 2, 14, 0, 0, 500)
   trades = []
   krakenDown = false
+  krakenDelayMs = 0
   nextId = 1
+  app = createApp({
+    prices,
+    store,
+    config,
+    clock: () => now,
+    sleep: async (ms) => {
+      now += ms
+    },
+  })
 })
 
 describe('GET /api/price', () => {
@@ -208,6 +214,11 @@ describe('POST /api/me/guess', () => {
     const res = await postGuess('up', undefined, toIso(now - 5001))
     expect(res.status).toBe(422)
     expect(res.body).toEqual({ error: { code: 'PRICE_OUTDATED' } })
+  })
+
+  it('rejects a seen price time in the future', async () => {
+    const res = await postGuess('up', undefined, toIso(now + 5001))
+    expect(res.status).toBe(400)
   })
 
   it('rejects a second active guess with 409', async () => {
@@ -347,6 +358,39 @@ describe('POST /api/me/guess/resolve', () => {
     const me = await request('GET', '/api/me', { playerId })
     expect(me.body.score).toBe(1)
     expect(me.body.history).toHaveLength(1)
+  })
+
+  it('skips Kraken for 2 s after a failure, then tries again', async () => {
+    const playerId = await newPlayerWithGuess('up')
+    now += 61_000
+    addTrade(-1, 101)
+    krakenDown = true
+    await postResolve(playerId)
+    krakenDown = false
+
+    now += 1000
+    expect((await postResolve(playerId)).body.activeGuess?.state).toBe('open')
+    now += 1500
+    expect((await postResolve(playerId)).body.activeGuess).toBeNull()
+  })
+
+  it('shares one Kraken deadline across both searches of a request', async () => {
+    addTrade(-500, 100)
+    addTrade(100, 100)
+    krakenDown = true
+    const playerId = (await postGuess('up')).body.playerId as string
+    krakenDown = false
+    now += 61_000
+    addTrade(-1, 101)
+
+    // The entry search takes longer than the deadline, so the outcome search doesn't start.
+    krakenDelayMs = 3500
+    const first = await postResolve(playerId)
+    expect(first.body.activeGuess).toMatchObject({ entryPrice: 100 })
+
+    krakenDelayMs = 0
+    now += 2001
+    expect((await postResolve(playerId)).body.activeGuess).toBeNull()
   })
 
   it('keeps the guess unchanged while Kraken is unavailable', async () => {

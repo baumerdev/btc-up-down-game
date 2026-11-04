@@ -3,9 +3,13 @@
 # upload the frontend, invalidate the cache, smoke test. Run from the repository root.
 set -euo pipefail
 
+npm ci
+
 # Always this account, regardless of the shell's default profile.
 export AWS_PROFILE=btc-updown AWS_REGION=eu-central-1 AWS_PAGER=""
 account=$(aws sts get-caller-identity --query Account --output text)
+# Make sure the state bucket belongs to this account.
+aws s3api head-bucket --bucket "btc-updown-tfstate-$account" --expected-bucket-owner "$account"
 
 npm run build -w api
 terraform -chdir=infra init -input=false -backend-config="bucket=btc-updown-tfstate-$account"

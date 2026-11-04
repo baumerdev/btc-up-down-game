@@ -62,12 +62,12 @@ describe('tradesSince', () => {
   it('follows the cursor across full pages and drops the repeated last trade', async () => {
     const full = Array.from({ length: 1000 }, (_, i) => krakenRow(i + 1, T + i / 1000))
     queuedResponses = [
-      krakenPage(full, 'cursor-1'),
-      krakenPage([krakenRow(1000, T + 0.999), krakenRow(1001, T + 1)], 'cursor-2'),
+      krakenPage(full, '1793646018261680600'),
+      krakenPage([krakenRow(1000, T + 0.999), krakenRow(1001, T + 1)], '1793646019261680600'),
     ]
     const pages = await readAllPages(T * 1000)
 
-    expect(requestedUrls[1]).toContain('since=cursor-1')
+    expect(requestedUrls[1]).toContain('since=1793646018261680600')
     expect(pages).toHaveLength(2)
     expect(pages[0]).toHaveLength(1000)
     expect(pages[1]?.map((t) => t.id)).toEqual([1001])
@@ -75,7 +75,7 @@ describe('tradesSince', () => {
 
   it('reads at most 5 pages per call', async () => {
     const full = Array.from({ length: 1000 }, (_, i) => krakenRow(i + 1, T + i / 1000))
-    queuedResponses = Array(6).fill(krakenPage(full, 'next'))
+    queuedResponses = Array(6).fill(krakenPage(full, '1793646018261680600'))
     await readAllPages(T * 1000)
     expect(requestedUrls).toHaveLength(5)
   })
@@ -89,6 +89,7 @@ describe('untrusted data is treated as an outage', () => {
     ['a trade time before 2013', krakenPage([krakenRow(1, 1_000_000)], '1')],
     ['a trade time in the future', krakenPage([krakenRow(1, Date.now() / 1000 + 3600)], '1')],
     ['a row of the wrong shape', krakenPage([['100.0', T] as unknown as KrakenRow], '1')],
+    ['a cursor that is not a number', krakenPage([krakenRow(1, T)], '1&pair=X')],
   ])('rejects %s', async (_, body) => {
     queuedResponses = [body]
     await expect(readAllPages(T * 1000)).rejects.toThrow()

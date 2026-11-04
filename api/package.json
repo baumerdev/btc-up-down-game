@@ -6,7 +6,7 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "dev": "DYNAMODB_ENDPOINT=http://localhost:8000 TABLE_NAME=btc-updown-local PORT=3030 tsx watch src/server.ts",
+    "dev": "DYNAMODB_ENDPOINT=http://127.0.0.1:8000 TABLE_NAME=btc-updown-local PORT=3030 tsx watch src/server.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outfile=../infra/build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""

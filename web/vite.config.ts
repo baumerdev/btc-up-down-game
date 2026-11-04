@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // Vite proxies /api, so the browser sees one origin, as with CloudFront in production (DECISIONS.md #5, #19).
-const proxy = { '/api': process.env.API_URL ?? 'http://localhost:3030' }
+const proxy = { '/api': process.env.API_URL ?? 'http://127.0.0.1:3030' }
 
 // The production CSP (#14), applied to the built app in `vite preview`, so the end-to-end tests run under it.
 // The dev server can't use it, because Vite injects inline scripts for hot reloading.
@@ -17,6 +17,6 @@ const securityHeaders = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { port: 5173, strictPort: true, proxy },
-  preview: { port: 4173, strictPort: true, proxy, headers: securityHeaders },
+  server: { host: '127.0.0.1', port: 5173, strictPort: true, proxy },
+  preview: { host: '127.0.0.1', port: 4173, strictPort: true, proxy, headers: securityHeaders },
 })

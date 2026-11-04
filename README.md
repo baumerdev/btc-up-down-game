@@ -62,6 +62,12 @@ Deployed from a laptop to AWS (`eu-central-1`) with Terraform; there is no CI/CD
 2. Create `infra/terraform.tfvars` (gitignored) with `budget_email = "you@example.com"`.
 3. Run `infra/deploy.sh`. It builds everything, shows the Terraform plan and asks for confirmation, uploads the frontend, and smoke-tests the live URL.
 
+To rotate the origin secret between CloudFront and the Lambda (expect a few minutes of `403` from the API while CloudFront updates):
+
+```sh
+AWS_PROFILE=btc-updown terraform -chdir=infra apply -replace=random_password.origin_secret
+```
+
 To remove everything, run the following. It needs the Lambda build and `terraform.tfvars`, because Terraform evaluates the whole configuration before destroying. The state bucket is protected and removed by hand.
 
 ```sh

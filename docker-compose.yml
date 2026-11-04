@@ -1,7 +1,7 @@
 # DynamoDB Local for development and tests (DECISIONS.md #18, #19). Data lives in memory only.
 services:
   dynamodb:
-    image: amazon/dynamodb-local:latest
+    image: amazon/dynamodb-local@sha256:6ada631ec7aa5fc83446855eb17233e3dad184fec47477e8140c6c569cfe0c86
     command: -jar DynamoDBLocal.jar -inMemory -sharedDb
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"

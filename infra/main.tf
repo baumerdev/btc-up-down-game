@@ -23,6 +23,15 @@ provider "aws" {
   }
 }
 
+# WAF for CloudFront must live in us-east-1.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+  default_tags {
+    tags = { project = "btc-updown" }
+  }
+}
+
 variable "budget_email" {
   description = "Recipient of the budget alarm. Set in the gitignored terraform.tfvars or TF_VAR_budget_email."
   type        = string
@@ -123,6 +132,11 @@ resource "aws_lambda_function" "api" {
   }
 
   depends_on = [aws_cloudwatch_log_group.api]
+
+  # Concurrency may be set to 0 by hand to stop the API; a deploy must not undo it.
+  lifecycle {
+    ignore_changes = [reserved_concurrent_executions]
+  }
 }
 
 resource "aws_apigatewayv2_api" "api" {
@@ -150,8 +164,8 @@ resource "aws_apigatewayv2_stage" "api" {
 
   # Global, not per client (#13).
   default_route_settings {
-    throttling_rate_limit  = 50
-    throttling_burst_limit = 100
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
   }
 }
 
@@ -276,6 +290,7 @@ data "aws_cloudfront_cache_policy" "optimized" {
 
 resource "aws_cloudfront_distribution" "app" {
   enabled             = true
+  web_acl_id          = aws_wafv2_web_acl.app.arn
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
   http_version        = "http2and3"
@@ -367,6 +382,78 @@ resource "aws_cloudfront_distribution" "app" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+  }
+}
+
+# Per-IP rate limit (#13, #14).
+resource "aws_wafv2_web_acl" "app" {
+  provider = aws.us_east_1
+  name     = local.prefix
+  scope    = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  # Player endpoints are never cached, so they get a stricter limit of their own.
+  rule {
+    name     = "rate-limit-player-api"
+    priority = 0
+    action {
+      block {}
+    }
+    statement {
+      rate_based_statement {
+        limit                 = 300
+        evaluation_window_sec = 300
+        aggregate_key_type    = "IP"
+        scope_down_statement {
+          byte_match_statement {
+            search_string         = "/api/me"
+            positional_constraint = "STARTS_WITH"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      metric_name                = "rate-limit-player-api"
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "rate-limit-per-ip"
+    priority = 1
+    action {
+      block {}
+    }
+    statement {
+      # About 10 players behind one office IP; a flood is blocked within seconds.
+      rate_based_statement {
+        limit                 = 2000
+        evaluation_window_sec = 300
+        aggregate_key_type    = "IP"
+      }
+    }
+    visibility_config {
+      metric_name                = "rate-limit-per-ip"
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    metric_name                = local.prefix
+    cloudwatch_metrics_enabled = true
+    sampled_requests_enabled   = true
   }
 }
 

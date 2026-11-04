@@ -27,6 +27,10 @@ const ENTRY_PRICE_RETRY_MS = 300
  * to 60 s and 1 h when a quiet market had no trade in the last 10 s (#25).
  */
 const SEARCH_START_NEAR_MS = 10_000
+/** Upper bound for all Kraken searches of one request, well below the Lambda timeout of 10 s. */
+const KRAKEN_DEADLINE_MS = 3000
+/** After a Kraken failure, this instance skips Kraken for a while instead of retrying at once. */
+const KRAKEN_BACKOFF_MS = 2000
 const ENTRY_SEARCH_STARTS_MS = [SEARCH_START_NEAR_MS, 60_000, 60 * 60_000]
 
 /** What the app needs from outside. Tests pass a fake price module and a controllable clock. */
@@ -66,6 +70,8 @@ export function createApp({
   clock = Date.now,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
 }: AppDependencies) {
+  let krakenPausedUntil = 0
+
   /**
    * Turns the player item from DynamoDB into the response of all three player endpoints (#11):
    * ISO times, the lifecycle state derived from the stored fields, `null` for missing values,
@@ -106,24 +112,37 @@ export function createApp({
    * Keeps reading pages while the rule answers "incomplete" or "waiting", because a later trade
    * can still change the answer. Moves to the next, earlier start time only when the rule answers
    * "needs-earlier" (no trade before the moment among those read).
-   * Returns the rule's answer, or null if Kraken failed; the guess then stays as it is (#4).
+   * Returns the rule's answer, or null if Kraken failed or the request's `deadline` passed; the
+   * guess then stays as it is (#4).
    */
   const readTradeHistory = async <R extends { status: string }>(
     startTimes: number[],
     rule: (trades: Trade[]) => R,
+    deadline: number,
   ): Promise<R | null> => {
+    if (clock() < krakenPausedUntil) {
+      return null
+    }
+
     for (const since of startTimes) {
       const trades: Trade[] = []
       try {
+        if (clock() > deadline) {
+          throw new Error('deadline exceeded')
+        }
         for await (const page of prices.tradesSince(since)) {
           trades.push(...page)
           const { status } = rule(trades)
           if (status !== 'incomplete' && status !== 'waiting') {
             break
           }
+          if (clock() > deadline) {
+            throw new Error('deadline exceeded')
+          }
         }
       } catch (error) {
         log({ level: 'warn', msg: 'kraken trades failed', error: String(error) })
+        krakenPausedUntil = clock() + KRAKEN_BACKOFF_MS
         return null
       }
 
@@ -140,11 +159,16 @@ export function createApp({
    * the active guess. Returns the guess with its entry price, or null while Kraken's data for
    * that moment is not complete yet.
    */
-  const findEntryPrice = async (playerId: string, guess: GuessItem): Promise<GuessItem | null> => {
+  const findEntryPrice = async (
+    playerId: string,
+    guess: GuessItem,
+    deadline: number,
+  ): Promise<GuessItem | null> => {
     const moment = guess.createdAt
     const result = await readTradeHistory(
       ENTRY_SEARCH_STARTS_MS.map((before) => moment - before),
       (trades) => marketPriceAt(trades, moment),
+      deadline,
     )
     if (result?.status !== 'final') {
       return null
@@ -164,9 +188,11 @@ export function createApp({
     if (!guess) {
       return
     }
+    // One deadline for both searches below.
+    const deadline = clock() + KRAKEN_DEADLINE_MS
 
     if (guess.entryPrice === undefined) {
-      const withEntry = await findEntryPrice(player.playerId, guess)
+      const withEntry = await findEntryPrice(player.playerId, guess, deadline)
       if (!withEntry) {
         return
       }
@@ -184,6 +210,7 @@ export function createApp({
     const result = await readTradeHistory(
       [guess.resolvableAt - SEARCH_START_NEAR_MS, entryTradeTime - 1],
       (trades) => resolveGuess(trades, rule),
+      deadline,
     )
     if (!result) {
       return
@@ -312,8 +339,14 @@ export function createApp({
 
       // The display price the player decided on must be recent enough (#22).
       const now = clock()
-      if (now - Date.parse(seenPriceTime) > config.maxGuessDelayMs) {
+      const seen = Date.parse(seenPriceTime)
+      if (now - seen > config.maxGuessDelayMs) {
         throw new ApiError(422, 'PRICE_OUTDATED')
+      }
+
+      // The value comes from our own price response, so a future time is a forged request.
+      if (seen - now > config.maxGuessDelayMs) {
+        throw new ApiError(400, 'INVALID_REQUEST')
       }
 
       const guess: GuessItem = {
@@ -347,8 +380,9 @@ export function createApp({
 
       // The guess is stored. Try the entry price for a short while; if Kraken is slow or down,
       // the guess is returned as *locking* and resolve finds the price later (#2).
+      const deadline = clock() + KRAKEN_DEADLINE_MS
       while (
-        !(await findEntryPrice(playerId, guess)) &&
+        !(await findEntryPrice(playerId, guess, deadline)) &&
         clock() + ENTRY_PRICE_RETRY_MS < now + ENTRY_PRICE_WAIT_MS
       ) {
         await sleep(ENTRY_PRICE_RETRY_MS)

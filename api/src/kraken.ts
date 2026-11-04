@@ -30,7 +30,7 @@ const TradeRow = z.tuple([
 ])
 const TradesResponse = z.object({
   error: z.array(z.string()),
-  result: z.object({ [RESULT_KEY]: z.array(TradeRow), last: z.string() }).optional(),
+  result: z.object({ [RESULT_KEY]: z.array(TradeRow), last: z.string().regex(/^\d+$/) }).optional(),
 })
 
 /**
