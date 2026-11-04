@@ -33,6 +33,9 @@ const KRAKEN_DEADLINE_MS = 3000
 const KRAKEN_BACKOFF_MS = 2000
 const ENTRY_SEARCH_STARTS_MS = [SEARCH_START_NEAR_MS, 60_000, 60 * 60_000]
 
+/** Canonical form of every API path: lowercase segments separated by single slashes (#25). */
+export const isCanonicalPath = (path: string) => /^(\/[a-z]+)+$/.test(path)
+
 /** What the app needs from outside. Tests pass a fake price module and a controllable clock. */
 export interface AppDependencies {
   prices: Prices
@@ -279,6 +282,14 @@ export function createApp({
       ms: clock() - started,
       player: shortPlayerId(c.req.header('x-player-id')),
     })
+  })
+
+  // Paths are accepted only in canonical form (#25). lambda.ts also checks the raw path.
+  app.use(async (c, next) => {
+    if (!isCanonicalPath(new URL(c.req.url).pathname)) {
+      throw new ApiError(400, 'INVALID_REQUEST')
+    }
+    await next()
   })
 
   // POST only with a JSON body: a foreign site cannot send that without a CORS preflight,

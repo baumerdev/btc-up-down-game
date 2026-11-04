@@ -2,8 +2,8 @@
 // CloudFront adds. Requests that bypass CloudFront via the API Gateway URL get 403 (#14).
 import { timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
-import { handle } from 'hono/aws-lambda'
-import { createApp } from './app.ts'
+import { handle, type LambdaEvent } from 'hono/aws-lambda'
+import { createApp, isCanonicalPath } from './app.ts'
 import { loadConfig } from './config.ts'
 import { kraken } from './kraken.ts'
 import { createDynamoClient, createStore } from './store.ts'
@@ -15,13 +15,25 @@ if (originSecret.length === 0) {
 }
 
 const config = loadConfig()
-const app = new Hono()
+const app = new Hono<{ Bindings: { event: LambdaEvent } }>()
+
+/** Requests rejected here never reach the app's request log, so they get their own line. */
+const logRejected = (status: number, path: string) =>
+  console.log(JSON.stringify({ msg: 'rejected', status, path: path.slice(0, 80) }))
 
 app.use(async (c, next) => {
   const given = Buffer.from(c.req.header('x-origin-secret') ?? '')
   // Checked before any other work. Constant-time comparison, so timing reveals nothing.
   if (given.length !== originSecret.length || !timingSafeEqual(given, originSecret)) {
+    logRejected(403, c.req.path)
     return c.json({ error: { code: 'FORBIDDEN' } }, 403)
+  }
+  // The raw path from API Gateway, before the URL parser normalises it (#25).
+  const event = c.env.event
+  const rawPath = 'rawPath' in event ? event.rawPath : ''
+  if (!isCanonicalPath(rawPath)) {
+    logRejected(400, rawPath)
+    return c.json({ error: { code: 'INVALID_REQUEST' } }, 400)
   }
   await next()
 })

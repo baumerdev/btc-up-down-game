@@ -395,10 +395,57 @@ resource "aws_wafv2_web_acl" "app" {
     allow {}
   }
 
+  # API paths only in canonical form (#25), checked on the path as the viewer sent it.
+  rule {
+    name     = "canonical-api-path"
+    priority = 0
+    action {
+      block {}
+    }
+    statement {
+      and_statement {
+        statement {
+          byte_match_statement {
+            search_string         = "/api/"
+            positional_constraint = "STARTS_WITH"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+        statement {
+          not_statement {
+            statement {
+              regex_match_statement {
+                regex_string = "^(/[a-z]+)+$"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      metric_name                = "canonical-api-path"
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = true
+    }
+  }
+
   # Player endpoints are never cached, so they get a stricter limit of their own.
   rule {
     name     = "rate-limit-player-api"
-    priority = 0
+    priority = 1
     action {
       block {}
     }
@@ -414,9 +461,18 @@ resource "aws_wafv2_web_acl" "app" {
             field_to_match {
               uri_path {}
             }
+            # Compare the canonical path.
             text_transformation {
               priority = 0
-              type     = "NONE"
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "NORMALIZE_PATH"
+            }
+            text_transformation {
+              priority = 2
+              type     = "LOWERCASE"
             }
           }
         }
@@ -431,7 +487,7 @@ resource "aws_wafv2_web_acl" "app" {
 
   rule {
     name     = "rate-limit-per-ip"
-    priority = 1
+    priority = 2
     action {
       block {}
     }

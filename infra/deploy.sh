@@ -3,7 +3,7 @@
 # upload the frontend, invalidate the cache, smoke test. Run from the repository root.
 set -euo pipefail
 
-npm ci
+npm ci --ignore-scripts
 
 # Always this account, regardless of the shell's default profile.
 export AWS_PROFILE=btc-updown AWS_REGION=eu-central-1 AWS_PAGER=""

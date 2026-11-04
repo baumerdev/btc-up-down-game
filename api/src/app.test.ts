@@ -2,7 +2,7 @@
 // controllable clock. They exercise the real condition expressions (DECISIONS.md #7, #18).
 import { randomUUID } from 'node:crypto'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createApp } from './app.ts'
+import { createApp, isCanonicalPath } from './app.ts'
 import type { Config } from './config.ts'
 import type { Prices } from './kraken.ts'
 import type { Trade } from './rules.ts'
@@ -116,6 +116,36 @@ beforeEach(() => {
     sleep: async (ms) => {
       now += ms
     },
+  })
+})
+
+describe('canonical paths', () => {
+  it.each(['/api/price', '/api/me', '/api/me/guess', '/api/me/guess/resolve'])(
+    'accepts %s',
+    (path) => {
+      expect(isCanonicalPath(path)).toBe(true)
+    },
+  )
+
+  it.each([
+    '/api/pric%65',
+    '/api/%6De',
+    '/api/./me',
+    '/api/%2e/me',
+    '/api/x/../me',
+    '/api/me/..',
+    '/api//me',
+    '/api\\me',
+    '/API/me',
+    '/api/me/',
+    '',
+  ])('rejects %j', (path) => {
+    expect(isCanonicalPath(path)).toBe(false)
+  })
+
+  it('answers a non-canonical request with 400', async () => {
+    const res = await app.request('/api/pric%65')
+    expect(res.status).toBe(400)
   })
 })
 
